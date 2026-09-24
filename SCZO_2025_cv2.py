@@ -40,9 +40,9 @@ v = 2
 phi =0
 A = 1
 shape = (200,100)
-harmonic_function = ...
-spectrum_of_harmonic_function = ...
-amplitude_spectrum= ...
+harmonic_function = create_harmonic_function(u, v, phi, A, shape)
+spectrum_of_harmonic_function = fftshift(fft2(harmonic_function))
+amplitude_spectrum= np.abs(spectrum_of_harmonic_function)
 
 plt.figure()
 plt.subplot(1,2,1)
@@ -65,11 +65,31 @@ plt.show()
 
 # Měnte vstupní parametry harmonické funkce a pozorujte jejich vliv na výstupní obraz a jeho spektrum.
 plt.close('all')
-us = ...
-vs = ...
-phi = ...
-A = ...
+# kazdy sloupec = jedna kombinace parametru (u, v, phi, A)
+params = [
+    (0, 0, 0, 1),          # u = v = 0 -> konstanta, jen DC slozka uprostred
+    (3, 2, 0, 1),          # zakladni
+    (10, 10, 0, 1),        # vyssi frekvence -> hustsi pruhy, body dal od stredu
+    (3, 2, np.pi/2, 1),    # zmena faze -> pruhy posunute, amplitudove spektrum STEJNE
+    (3, 2, 0, 5),          # zmena amplitudy -> vyssi hodnota bodu ve spektru (viz max)
+    (3.5, 2, 0, 1),        # neceločíselna frekvence -> rozmazani spektra (leakage)
+]
 shape = (200,100)
+
+plt.figure(figsize=(3 * len(params), 5))
+for i, (u_i, v_i, phi_i, A_i) in enumerate(params):
+    h = create_harmonic_function(u_i, v_i, phi_i, A_i, shape)
+    S = np.abs(fftshift(fft2(h)))
+    plt.subplot(2, len(params), i + 1)
+    plt.imshow(h, cmap='gray', vmin=-5, vmax=5)
+    plt.title(f'u={u_i}, v={v_i}\nphi={phi_i:.2f}, A={A_i}')
+    plt.axis('off')
+    plt.subplot(2, len(params), len(params) + i + 1)
+    plt.imshow(S, cmap='gray')
+    plt.title(f'max |F| = {S.max():.0f}')
+    plt.axis('off')
+plt.tight_layout()
+plt.show()
 
 
 # =============================================================================
@@ -112,9 +132,9 @@ y = 200
 a = 20
 b = 20
 
-img = generate_rectangle(...)
-ampl_spectrum = ...
-shape = ...
+img = generate_rectangle(x, y, a, b)                    # tvar (x, y) = 100 radku x 200 sloupcu
+ampl_spectrum = np.log(1 + np.abs(fftshift(fft2(img))))  # log, jinak je videt jen stred (DC)
+shape = img.shape
 
 plt.figure()
 plt.subplot(1,2,1)
@@ -133,10 +153,28 @@ plt.yticks(ticks=np.linspace(start = shape[0], stop = 0, num = shape[0]//2), lab
 plt.show()
 
 # # Měnte vstupní parametry A a B funkce a pozorujte jejich vliv na výstupní obraz a jeho spektrum.
-a_s = ...
-b_s = ...
+a_s = [1, 10, 40, 10, 80]    # A = rozmer ve svislem smeru (radky)
+b_s = [1, 10, 40, 80, 10]    # B = rozmer ve vodorovnem smeru (sloupce)
 
-plt.figure()
+plt.figure(figsize=(3 * len(a_s), 6))
+for i, (a_i, b_i) in enumerate(zip(a_s, b_s)):
+    img_i = generate_rectangle(x, y, a_i, b_i)
+    S_i = np.log(1 + np.abs(fftshift(fft2(img_i))))
+    plt.subplot(2, len(a_s), i + 1)
+    plt.imshow(img_i, cmap='gray')
+    plt.title(f'A = {a_i}, B = {b_i}')
+    plt.axis('off')
+    plt.subplot(2, len(a_s), len(a_s) + i + 1)
+    plt.imshow(S_i, cmap='gray')
+    plt.title('log |F|')
+    plt.axis('off')
+plt.tight_layout()
+plt.show()
+# Pozorovani:
+# - spektrum obdelniku = 2D sinc; nulove body po ose radku po x/A, po ose sloupcu po y/B
+# - vetsi obdelnik -> uzsi hlavni lalok (neprima umernost prostor <-> frekvence)
+# - A = B = 1 (bod / delta) -> konstantni (ploche) spektrum
+# - protahly obdelnik -> spektrum protahle v KOLMEM smeru
 
 
 # =============================================================================
@@ -149,7 +187,7 @@ plt.close('all')
 
 # Načtěte nultý kanál podvzorkovaného obrazu loga komety 'kometa_brno_podvzorkovana.png'
 img = imread('data/kometa_brno_podvzorkovana.png')[:, :,0]
-spectrum = ...
+spectrum = fft2(img)
 
 # Zobrazte tento obraz spolu s jeho amplitudovým a fázovým spektrem
 shape = np.shape(img)
@@ -181,9 +219,15 @@ plt.show()
 # Ověřte si teorii, že každý obraz je stvořený z řady 2D harmonických složek.
 ampl_spektrum = fftshift(np.abs(spectrum))
 fazove_spektrum = fftshift(np.angle(spectrum))
-final_image = np.zeros_like(img)
+final_image = np.zeros_like(img, dtype=float)
 
-...
+for u in range(0, np.shape(spectrum)[0]):
+    for v in range(0, np.shape(spectrum)[1]):
+        spectrum_of_harmonic_function = np.zeros_like(spectrum)
+        spectrum_of_harmonic_function[u,v] = spectrum [u,v]
+        spectrum_of_harmonic_function[-u,-v] = spectrum [-u,-v]
+        harm_function = np.flipud(np.real(ifft2(spectrum_of_harmonic_function)))
+        final_image = final_image + harm_function
 
 plt.figure()
 plt.subplot(1,2,1)
@@ -227,13 +271,13 @@ plt.ylabel('Prostorova souradnice [m]')
 plt.show()
 
 # Vypočtěte jejich spektra a do jednoho figure zobrazte amplitudovou a fázovou část spektra.
-IMG_1=...
-IMG_2=...
+IMG_1=fft2(img_1)
+IMG_2=fft2(img_2)
 
-amplitude_kometa=...
-phase_kometa=...
-amplitude_sparta=...
-phase_sparta=...
+amplitude_kometa=np.abs(IMG_1)
+phase_kometa=np.angle(IMG_1)
+amplitude_sparta=np.abs(IMG_2)
+phase_sparta=np.angle(IMG_2)
 
 shape = np.shape(amplitude_kometa)
 
@@ -274,11 +318,11 @@ plt.yticks(ticks=np.linspace(start = shape[0], stop = 0, num = 20), labels=np.li
 plt.show()
 
 # Prohoďte amplitudová a fázová spektra obou obrazů a zobrazte obrazy po prohození v originální oblasti.
-IMG1_changed=...
-IMG2_changed=...
+IMG1_changed=amplitude_kometa*np.exp(1j*phase_sparta)
+IMG2_changed=amplitude_sparta*np.exp(1j*phase_kometa)
 
-img1_mixed=...
-img2_mixed=...
+img1_mixed=np.real(ifft2(IMG1_changed))
+img2_mixed=np.real(ifft2(IMG2_changed))
 
 plt.figure()
 plt.subplot(121)
